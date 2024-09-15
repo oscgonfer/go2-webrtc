@@ -43,7 +43,7 @@ import hashlib
 import struct
 import base64
 
-from python.go2_webrtc.lidar_decoder import LidarDecoder
+from go2_webrtc.lidar_decoder import LidarDecoder
 
 
 load_dotenv()
@@ -113,7 +113,9 @@ class Go2Connection:
         await self.video_track.start()
 
         offer = await self.pc.createOffer()
+        logger.debug("Offer SDP")
         logger.debug(offer.sdp)
+        logger.debug("----")
 
         await self.pc.setLocalDescription(offer)
         return offer.sdp

@@ -4,3 +4,4 @@ paho-mqtt
 python-dotenv
 pygame
 wasmtime
+numpy
