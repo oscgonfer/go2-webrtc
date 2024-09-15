@@ -27,7 +27,8 @@ import os
 import pygame
 
 from go2_webrtc import Go2Connection, ROBOT_CMD
-
+pygame.init()
+pygame.joystick.init()
 
 JOY_SENSE = 0.2
 
@@ -61,13 +62,10 @@ def gen_mov_command(x: float, y: float, z: float):
     return command
 
 
-async def get_joystick_values():
-    pygame.init()
-    pygame.joystick.init()
+async def get_joystick_values(joystick = None):
+    pygame.event.pump()
+    if joystick is not None:
 
-    if pygame.joystick.get_count() > 0:
-        joystick = pygame.joystick.Joystick(0)
-        joystick.init()
 
         axis0 = round(joystick.get_axis(0), 1) * -1
         axis1 = round(joystick.get_axis(1), 1) * -1
@@ -75,6 +73,7 @@ async def get_joystick_values():
         axis3 = round(joystick.get_axis(3), 1) * -1
         btn_a_is_pressed = joystick.get_button(0)
         btn_b_is_pressed = joystick.get_button(1)
+        btn_x_is_pressed = joystick.get_button(2)
 
         return {
             "Axis 0": axis0,
@@ -83,21 +82,24 @@ async def get_joystick_values():
             "Axis 3": axis3,
             "a": btn_a_is_pressed,
             "b": btn_b_is_pressed,
+            "x": btn_x_is_pressed
         }
 
     return {"Axis 0": 0, "Axis 1": 0, "Axis 2": 0, "Axis 3": 0, "a": 0, "b": 0}
 
 
-async def start_joy_bridge(robot_conn):
+async def start_joy_bridge(robot_conn, joystick):
     await robot_conn.connect_robot()
 
     while True:
-        joystick_values = await get_joystick_values()
+        joystick_values = await get_joystick_values(joystick=joystick)
+        print (joystick_values)
         joy_move_x = joystick_values["Axis 1"]
         joy_move_y = joystick_values["Axis 0"]
         joy_move_z = joystick_values["Axis 2"]
         joy_btn_a_is_pressed = joystick_values["a"]
         joy_btn_b_is_pressed = joystick_values["b"]
+        joy_btn_x_is_pressed = joystick_values["x"]
 
         if joy_btn_a_is_pressed == 1:
             robot_cmd = gen_command(ROBOT_CMD["StandUp"])
@@ -107,28 +109,41 @@ async def start_joy_bridge(robot_conn):
             robot_cmd = gen_command(ROBOT_CMD["StandDown"])
             robot_conn.data_channel.send(robot_cmd)
 
-        if abs(joy_move_x) > 0.0 or abs(joy_move_y) > 0.0 or abs(joy_move_z) > 0.0:
-            robot_cmd = gen_mov_command(joy_move_x, joy_move_y, joy_move_z)
+        if joy_btn_x_is_pressed == 1:
+            robot_cmd = gen_command(ROBOT_CMD["Move"])
             robot_conn.data_channel.send(robot_cmd)
 
-        await asyncio.sleep(0.1)
+        if abs(joy_move_x) > 0.0 or abs(joy_move_y) > 0.0 or abs(joy_move_z) > 0.0:
+            robot_cmd = gen_mov_command(joy_move_x, joy_move_y, joy_move_z)
+            print (robot_cmd)
+            robot_conn.data_channel.send(robot_cmd)
 
+        await asyncio.sleep(0.001)
 
 async def main():
+    print (os.getenv("GO2_IP"))
+    print (os.getenv("GO2_TOKEN"))
     conn = Go2Connection(
         os.getenv("GO2_IP"),
         os.getenv("GO2_TOKEN"),
     )
 
-    coroutine = await start_joy_bridge(conn)
+    if pygame.joystick.get_count() > 0:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+    else:
+        joystick = None
+
+    coroutine = await start_joy_bridge(robot_conn = conn, joystick = joystick)
 
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(coroutine)
     except KeyboardInterrupt:
+        raise SystemExit()
         pass
     finally:
+        pygame.joystick.quit()
         loop.run_until_complete(conn.pc.close())
-
 
 asyncio.run(main())
